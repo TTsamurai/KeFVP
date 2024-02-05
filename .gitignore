@@ -1,3 +1,5 @@
 logs
 pretrain/kept_dataset
 pretrain/pretrained_models
+raw_data
+text_embedding

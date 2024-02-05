@@ -9,6 +9,7 @@ import pickle
 import numpy as np
 import json
 from torch.utils.data import DataLoader
+import ipdb
 
 
 def generate_embedding(args, tokenizer, model):
@@ -16,9 +17,10 @@ def generate_embedding(args, tokenizer, model):
     output_dct = {}
     all_sent_num = []
     for data_dir in tqdm(data_list):
+        ipdb.set_trace()
         output_dct[data_dir] = {}
-        # text_path = args.data_path + data_dir + '/text.txt'
-        text_path = args.data_path + data_dir + "/Text.txt"  # For ec
+        # text_path = args.data_path + data_dir + '/TextSequence.txt'
+        text_path = args.data_path + data_dir + "/TextSequence.txt"  # For ec
         text_file = open(text_path)
         all_sent_for_one_text = []
         for line in text_file.readlines():
@@ -61,7 +63,7 @@ def generate_embedding_large(args, tokenizer, model):
     output_dct = {}
     for data_dir in tqdm(data_list):
         output_dct[data_dir] = {}
-        text_path = args.data_path + data_dir + "/Text.txt"
+        text_path = args.data_path + data_dir + "/TextSequence.txt"
         text_file = open(text_path)
         all_sent_for_one_text = []
         last_hidden_out, out_for_on_text = [], []
@@ -111,7 +113,7 @@ def generate_embedding_with_cuda(args, tokenizer, model):
     output_dct = {}
     for data_dir in tqdm(data_list):
         output_dct[data_dir] = {}
-        text_path = args.data_path + data_dir + "/Text.txt"
+        text_path = args.data_path + data_dir + "/TextSequence.txt"
         text_file = open(text_path)
         last_hidden_out, second_last_hidden_out, out_for_on_text = [], [], []
         for line in text_file.readlines():
@@ -156,39 +158,40 @@ if __name__ == "__main__":
 
     parser.add_argument(
         "--ptm_type",
-        default="/home/m2021ttakayanagi/Documents/KeFVP/pretrain/pretrained_models/bert_base_uncased/",
+        default="/home/m2021ttakayanagi/Documents/KeFVP/pretrain/pretrained_models/bert_base_uncased",
         type=str,
     )
     parser.add_argument(
         "--data_path",
-        default="/your/project/path/raw_data/ReleasedDataset_mp3/",
+        # default="/your/project/path/raw_data/ReleasedDataset_mp3/",
+        # ecかmaecのrawデータを指定するパス
+        # 正直このデータセットパスの指定がこれで良いかわからない
+        default="/home/m2021ttakayanagi/Documents/KeFVP/raw_data/ec/ACL19_Release/",
         type=str,
     )  # /your/project/path/raw_data/ReleasedDataset_mp3/
     parser.add_argument("--max_sent", default=512, type=int)
     parser.add_argument("--local_rank", default=0, type=int)
     parser.add_argument(
-        "--save_path", default="/your/project/path/text_embedding/kept.pkl", type=str
+        "--save_path", default="/home/m2021ttakayanagi/Documents/KeFVP/text_embedding/kept.pkl", type=str
     )
     parser.add_argument(
         "--save_path_with_cuda",
-        default="/your/project/path/pklFiles/kept_cuda.pkl",
+        default="/home/m2021ttakayanagi/Documents/KeFVP/pklFiles/kept_cuda.pkl",
         type=str,
     )
     args = parser.parse_args()
 
     print(args)
 
-    data_dir = "/your/dataset/path"
+    data_dir = "/home/m2021ttakayanagi/Documents/KeFVP/"
     new_tokens = []
     with open(data_dir + "data_process/needed_files/final_wiki_ids.json", "r") as f:
         wiki_ids = json.load(f)
     for line in wiki_ids.keys():
         new_tokens += [line.strip()]
-
     tokenizer = AutoTokenizer.from_pretrained(args.ptm_type)  # args.ptm_type
     args.device = "cuda"
 
     ptm = AutoModel.from_pretrained(args.ptm_type).to(args.device)  # .to(args.device)
-
     generate_embedding(args, tokenizer, ptm)
     # generate_embedding_with_cuda(args, tokenizer, model)

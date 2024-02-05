@@ -110,7 +110,11 @@ def go(args):
     train_data = load_examples(
         args, args.task_name, args.data_dir, TRAIN_SET, num_examples=args.train_examples
     )
+    # 理解　generate_datasetでtokenizerにnew tokenが追加される
     train_dataset = generate_dataset(args, train_data, labelled=True)
+    # 修正　ここでtokenizerを保存してしまう
+    args.tokenizer.save_pretrained("/home/m2021ttakayanagi/Documents/KeFVP/pretrain/pretrained_models/bert_base_uncased")
+    # ipdb.set_trace()
     train_sampler = data.RandomSampler(train_dataset)
     train_dataloader = data.DataLoader(
         train_dataset, sampler=train_sampler, batch_size=args.batch_size
