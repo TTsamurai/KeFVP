@@ -7,7 +7,7 @@ import copy
 from .util import mask_, contains_nan
 
 import random, math
-from latent.nn.kuma_gate import KumaGate
+# from latent.nn.kuma_gate import KumaGate
 
 def mask_logits(target, mask):
     return target * mask + (1 - mask) * (-1e30)

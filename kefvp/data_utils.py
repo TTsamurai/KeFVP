@@ -9,8 +9,18 @@ from torch.utils.data import Dataset
 import torch.nn as nn
 import random
 from tqdm import tqdm
+import ipdb
 
-
+#　修正 
+def set_seed(seed: int):
+    """Set RNG seeds for python's `random` module, numpy and torch"""
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    # if torch.cuda.is_available():
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
 
 class DictDataset(Dataset):
     """A dataset of tensors that uses a dictionary for key-value mappings"""
@@ -32,7 +42,7 @@ class DictDataset(Dataset):
 
 def select_dataset(args, base_dir):
     
-    if args.dataset == 'ec':
+    if args.dataset == 'ec': 
         
         with open(base_dir + 'text_embedding/{}.pkl'.format(args.text_embedding), 'rb') as f:   # 
             graph_embd_dict=pickle.load(f)

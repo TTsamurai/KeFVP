@@ -24,9 +24,14 @@ from transformers import AutoModel, AutoModelForPreTraining
 # from transformer import util
 from .util import mask_, contains_nan
 from .util import d
-from latent.kumadist import IndependentLatentModel, DependentLatentModel
-from transformers_model.modules import CrossAttention, GraphConvolution, CrossFusion
-from time_models import Informer, Autoformer, Transformer, ReviseAutoformer
+# よく分からんからコメントアウト
+# from latent.kumadist import IndependentLatentModel, DependentLatentModel
+# from transformers_model.modules import CrossAttention, GraphConvolution, CrossFusion
+# 使っていないCrossFusion以外をコメントアウト
+from transformers_model.modules import CrossFusion
+# 修正　使っていないやつをコメントアウト
+# from time_models import Informer, Autoformer, Transformer, ReviseAutoformer
+from time_models import Autoformer, Transformer
 
 class SelfAttention(nn.Module):
     def __init__(self, emb, heads=8, mask=False):

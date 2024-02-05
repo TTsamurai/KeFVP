@@ -20,6 +20,7 @@ from data_utils import DictDataset, select_dataset
 from torch.utils.data import DataLoader, RandomSampler
 from time_models import Autoformer, Transformer
 from transformers_model.modules import MergeFeature
+import ipdb
 
 
 def ModifyData(args, df,single_df, price_df, raw_data_path):
@@ -454,15 +455,16 @@ if __name__ == '__main__':
     parser.add_argument('--pid', default='6', type=str)
     parser.add_argument('--pred_save_dir', default='text_dir', type=str)
     parser.add_argument('--run_mode', default='reg', type=str)  #cls, reg
-    parser.add_argument('--raw_data_path', default='/your/project/path/MAECdata/MAEC_Dataset/', type=str)  # /your/project/path/MAECdata/MAEC_Dataset/    /your/project/path/raw_data/ReleasedDataset_mp3/
+    parser.add_argument('--raw_data_path', default='/home/m2021ttakayanagi/Documents/KeFVP/raw_data/ec/ACL19_Release/', type=str)  # /your/project/path/MAECdata/MAEC_Dataset/    /your/project/path/raw_data/ReleasedDataset_mp3/
     parser.add_argument('--dist_threshold', default=0.95, type=float)
     parser.add_argument('--dataset', default='ec', type=str, choices=['ec', '15', '16'])
     parser.add_argument('--audio_indim', default=29, type=int) # 768 for ec
     parser.add_argument('--text_indim', default=768, type=int) # 768 for ec
-    parser.add_argument('--text_embedding', type=str, default='raw_bert_base_uncased') # bert-base : raw_bert_base_uncased; prosuai finbert: raw_prosusai_finbert; knowledge MLM : bert_base_uncased_pretrain_descrip_ep60; raw MLM: bert_base_uncased_pretrain_raw_ep60
+    # 修正
+    parser.add_argument('--text_embedding', type=str, default='kept') # bert-base : raw_bert_base_uncased; prosuai finbert: raw_prosusai_finbert; knowledge MLM : bert_base_uncased_pretrain_descrip_ep60; raw MLM: bert_base_uncased_pretrain_raw_ep60
     # flang-bert: ec_embed_flang_bert_raw
     parser.add_argument('--pkl_save_path', default='save_pkls', type=str)
-    parser.add_argument('--log_save_path', default='temp_log', type=str)
+    parser.add_argument('--log_save_path', default='final_series_infer_logs', type=str)
 
     # time model
     parser.add_argument('--gumbel_temprature', default=1, type=int)
@@ -495,19 +497,18 @@ if __name__ == '__main__':
     parser.add_argument('--modes', default=32, type=int, help='for fedformer')
     
     args = parser.parse_args()
-    
     logger = logging.getLogger('cli')
     logger.setLevel(logging.INFO)
     logger.addHandler(logging.StreamHandler(sys.stdout))
     log_file = '{}-{}-{}-{}-{}-{}.log'.format('final_series_infer', strftime("%Y-%m-%d_%H:%M:%S", localtime()), args.dataset, args.duration, args.dist_threshold, args.time_model)
-    logger.addHandler(logging.FileHandler("%s/%s" % ('/your/project/path/log/{}'.format(args.log_save_path), log_file)))
+    logger.addHandler(logging.FileHandler("%s/%s" % ('/home/m2021ttakayanagi/Documents/KeFVP/logs/{}'.format(args.log_save_path), log_file)))
     args.logger = logger
 
     args.logger.info(args)
 
-    out_path = '/your/project/path/output/'
-    base_dir = '/your/dataset/path/'
-    feature_dir = '/your/project/path/save_features'
+    out_path = '/home/m2021ttakayanagi/Documents/KeFVP/kefvp/output/'
+    base_dir = '/home/m2021ttakayanagi/Documents/KeFVP/'
+    feature_dir = '/home/m2021ttakayanagi/Documents/KeFVP/save_features'
     
     set_seed(args.seed)
     
