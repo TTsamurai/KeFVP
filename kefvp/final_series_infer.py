@@ -64,6 +64,7 @@ def ModifyData(args, df,single_df, price_df, raw_data_path):
         if args.dataset == 'ec':
             lstm_matrix_temp = np.zeros((512, args.text_indim), dtype=np.float64)
             i=0
+            # 理解　音声データを使用するかしないか．ここではhubertによる音声データは使用しない
             try:
                 audio_path = raw_data_path + row['text_file_name'] + '/audio_from_hubert_base_superb_ks.pkl'
                 with open(audio_path, "rb") as f:
@@ -212,10 +213,13 @@ def ModifyData(args, df,single_df, price_df, raw_data_path):
 class CondInfer(nn.Module):
     def __init__(self, args):
         super(CondInfer, self).__init__()
+        #修正 デフォルトだとAutoformerにされているが，ここではコメントされているようにCondAutoformerを使ってみよう
         time_model_dict = {
                 'CondTransformer': CondTransformer,
                 'CondAutoformer': CondAutoformer,
+                "Autoformer": Autoformer,
             }
+        # ipdb.set_trace()
         self.model = time_model_dict[args.time_model](args)   # CondAutoformer
         self.args = args
         
@@ -291,12 +295,13 @@ def eval(args, model, dataloader, evaluation, e, best_mse, best_f1, eval_type='d
                 evaluation['Test MSE'].append(loss_avg.item())
                 evaluation['Test MSE AUXILIARY'].append(loss_single.item())
                 pred_df = pd.DataFrame(pred)
-                pred_df.to_csv(os.path.join('/your/project/path/preds_dir/', args.pred_save_dir+'/'+args.run_mode +'/final_serise_infer_pred_'+str(args.duration)+'.csv'))
+                pred_df.to_csv(os.path.join('/home/m2021ttakayanagi/Documents/KeFVP/preds_dir/', args.pred_save_dir+'/'+args.run_mode +f'/{args.dataset}_final_serise_infer_pred_'+str(args.duration)+'.csv'))
             
             if eval_type == 'dev' and e != 'final':
                 if best_mse > loss_avg.item():
                     print('save model ..., best_dev_mse: {}'.format(str(best_mse)))
-                    save_path = '/your/project/path/{}/{}/{}/final_serise_infer_best_pkls_{}_{}_dur{}_{}.pth.tar'.format(args.pkl_save_path, args.dataset, args.duration, args.dataset, args.pid, args.duration, args.time_model)
+                    # 修正
+                    save_path = '/home/m2021ttakayanagi/Documents/KeFVP/{}/{}/{}/final_serise_infer_best_pkls_{}_{}_dur{}_{}.pth.tar'.format(args.pkl_save_path, args.dataset, args.duration, args.dataset, args.pid, args.duration, args.time_model)
                     save_path_dir = '/'.join(save_path.split('/')[:-1])
                     if not os.path.exists(save_path_dir):
                         os.makedirs(save_path_dir)
@@ -331,7 +336,7 @@ def eval(args, model, dataloader, evaluation, e, best_mse, best_f1, eval_type='d
                 
             if eval_type == 'dev' and e != 'final':
                 if best_f1 < f1:
-                    save_path = '/your/project/path/{}/{}/{}/cls_final_serise_infer_best_pkls_{}_{}_dur{}_{}.pth.tar'.format(args.pkl_save_path, args.dataset, args.duration, args.dataset, args.pid, args.duration, args.time_model)
+                    save_path = '/home/m2021ttakayanagi/Documents/KeFVP/{}/{}/{}/cls_final_serise_infer_best_pkls_{}_{}_dur{}_{}.pth.tar'.format(args.pkl_save_path, args.dataset, args.duration, args.dataset, args.pid, args.duration, args.time_model)
                     save_path_dir = '/'.join(save_path.split('/')[:-1])
                     if not os.path.exists(save_path_dir):
                         os.makedirs(save_path_dir)
@@ -425,7 +430,7 @@ def runner(args, train_dataset, test_dataset, dev_dataset, avg_day_mse_list, sin
         evaluation, best_mse, _, _, best_f1 = eval(args, model, devloader, evaluation, e, best_mse, best_f1, eval_type='dev')
         evaluation, _, _, _, _ = eval(args, model, testloader, evaluation, 'test', best_mse, best_f1, eval_type='test')
 
-    model.load_state_dict(torch.load('/your/project/path/{}/{}/{}/final_serise_infer_best_pkls_{}_{}_dur{}_{}.pth.tar'.format(args.pkl_save_path, args.dataset, args.duration, args.dataset, args.pid, args.duration, args.time_model)))          
+    model.load_state_dict(torch.load('/home/m2021ttakayanagi/Documents/KeFVP/{}/{}/{}/final_serise_infer_best_pkls_{}_{}_dur{}_{}.pth.tar'.format(args.pkl_save_path, args.dataset, args.duration, args.dataset, args.pid, args.duration, args.time_model)))          
     evaluation, best_mse, loss_avg, loss_single, _ = eval(args, model, testloader, evaluation, 'test', best_mse, best_f1, eval_type='test')
     avg_day_mse_list.append(loss_avg.item())
     single_day_mse_list.append(loss_single.item())
@@ -472,7 +477,7 @@ if __name__ == '__main__':
     parser.add_argument('--time_model_to_save', default=False, type=bool)
     parser.add_argument('--time_model', type=str, default='Autoformer', choices=['Autoformer', 'Transformer', 'Informer', \
                                                                                       'CondAutoformer', 'CondTransformer', 'CondFEDformer', 'CondInformer'])
-    parser.add_argument('--saved_feature_dir', default='/your/project/path/save_features', type=str)
+    parser.add_argument('--saved_feature_dir', default='/home/m2021ttakayanagi/Documents/KeFVP/save_features', type=str)
     parser.add_argument('--source', default='price_reviseautofm', type=str)  # text&audio&price
     parser.add_argument('--freq', default='h', type=str)
 
@@ -516,7 +521,7 @@ if __name__ == '__main__':
     
     traindf,single_traindf, price_df_train, testdf,single_testdf, price_df_test, valdf,single_valdf, price_df_val, graph_embd_dict \
                     = select_dataset(args, base_dir)
-    
+    # ipdb.set_trace()
     train_dataset = ModifyData(args, traindf,single_traindf, price_df_train, args.raw_data_path)
 
     test_dataset = ModifyData(args, testdf,single_testdf, price_df_test, args.raw_data_path)
@@ -526,6 +531,7 @@ if __name__ == '__main__':
     avg_day_mse_list,  single_day_mse_list = [], []
 
     for i in range(10):
+        # ipdb.set_trace()    
         args.logger.info("i="+str(i))
         avg_day_mse_list, single_day_mse_list = runner(args, train_dataset, test_dataset, dev_dataset, avg_day_mse_list, single_day_mse_list)
         args.logger.info('duration: {}'.format(str(args.duration)))
@@ -537,8 +543,12 @@ if __name__ == '__main__':
         args.logger.info('SINGLE MSE: {}'.format(single_day_mse_list))
 
     avg_day_mse_df=pd.DataFrame(avg_day_mse_list)
-    avg_day_mse_df.to_csv(out_path + '3GCN_LSTM_boxplot_cond_avg_day_mse_df.csv')
+    # avg_day_mse_df.to_csv(out_path + '3GCN_LSTM_boxplot_cond_avg_day_mse_df.csv')
+    # 修正
+    avg_day_mse_df.to_csv(out_path + args.dataset +'/cond_avg_day_mse_df_{}.csv'.format(args.duration))
 
     single_day_mse_df=pd.DataFrame(single_day_mse_list)
-    single_day_mse_df.to_csv(out_path + '3GCN_LSTM_boxplot_cond_single_day_mse_df.csv')
+    # single_day_mse_df.to_csv(out_path + '3GCN_LSTM_boxplot_cond_single_day_mse_df.csv')
+    # 修正
+    single_day_mse_df.to_csv(out_path + args.dataset +'/cond_single_day_mse_df_{}.csv'.format(args.duration))
 

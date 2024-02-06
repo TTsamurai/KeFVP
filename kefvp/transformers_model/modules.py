@@ -228,8 +228,8 @@ class TransformerBlock(nn.Module):
         return x
 
 
-
-    
+# 修正：GraphChannelAttLayerが実装されていないとされていた
+class GraphChannelAttLayer(nn.Module):    
     def __init__(self, num_channel, weights=None):
         super(GraphChannelAttLayer, self).__init__()
         self.weight = nn.Parameter(torch.Tensor(num_channel, 1, 1))
