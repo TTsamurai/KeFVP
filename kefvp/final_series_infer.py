@@ -6,6 +6,7 @@ import pandas as pd
 import logging
 from time import strftime, localtime
 import pickle
+import optuna  # 修正
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -272,7 +273,6 @@ class CondInfer(nn.Module):
             "CondAutoformer": CondAutoformer,
             "Autoformer": Autoformer,
         }
-        # ipdb.set_trace()
         self.model = time_model_dict[args.time_model](args)  # CondAutoformer
         self.args = args
 
@@ -509,7 +509,6 @@ def runner(
     devloader = DataLoader(
         dev_dataset, sampler=RandomSampler(dev_dataset), batch_size=args.batch_size
     )
-
     if args.time_model_to_save:
         model = TimeInfer(args).to(args.device)
     else:
@@ -638,6 +637,105 @@ def runner(
     return avg_day_mse_list, single_day_mse_list
 
 
+def runner_hyper_tuning(
+    args,
+    train_dataset,
+    dev_dataset,
+):
+
+    trainloader = DataLoader(
+        train_dataset, sampler=RandomSampler(train_dataset), batch_size=args.batch_size
+    )
+    devloader = DataLoader(
+        dev_dataset, sampler=RandomSampler(dev_dataset), batch_size=args.batch_size
+    )
+    if args.time_model_to_save:
+        model = TimeInfer(args).to(args.device)
+    else:
+        model = CondInfer(args).to(args.device)
+    opt = torch.optim.Adam(
+        model.parameters(),
+        lr=args.lr,
+        betas=(0.9, 0.999),
+        amsgrad=False,
+        weight_decay=args.weight_decay,
+    )  # weight_decay
+
+    criterion = nn.MSELoss()
+
+    step = 0
+    best_mse = 20
+    best_f1 = 0.0
+    evaluation = {
+        "Epoch": [],
+        "Train MSE": [],
+        "Dev MSE": [],
+        "Dev MSE AUXILIARY": [],
+        "Test MSE": [],
+        "Test MSE AUXILIARY": [],
+        "Dev F1": [],
+        "Dev ACC": [],
+        "Dev MATT": [],
+        "Test F1": [],
+        "Test ACC": [],
+        "Test MATT": [],
+    }
+    for e in tqdm(range(args.epochs)):
+        train_loss_tol = 0.0
+        model.train()
+        for i, batch in enumerate(trainloader):
+
+            step += 1
+            if step % 100 == 0:
+                args.gumbel_temprature = max(
+                    np.exp((step + 1) * -1 * args.gumbel_decay), 0.05
+                )
+
+            opt.zero_grad()
+
+            X_past, X_graph, y_avg, y_single, y_price, X_audio = select_inputs(
+                args, batch
+            )
+            if args.time_model_to_save:
+                avg_pred, single_pred, _ = model(
+                    X_past,
+                    X_graph,
+                )
+            else:
+                avg_pred, single_pred, avg_cls = model(X_past, X_graph, X_audio)
+            avg_loss = criterion(avg_pred, y_avg)
+            single_loss = criterion(single_pred, y_single)
+            if args.run_mode == "reg":
+                loss = args.mu * avg_loss + (1 - args.mu) * single_loss
+                # loss = avg_loss
+            elif args.run_mode == "cls":
+                loss = nn.CrossEntropyLoss()(avg_cls, y_price.long())
+            train_loss_tol += loss
+            loss.backward()
+            if args.gradient_clipping > 0.0:
+                nn.utils.clip_grad_norm_(model.parameters(), args.gradient_clipping)
+            opt.step()
+    evaluation, best_mse, loss_avg, loss_single, best_f1 = eval(
+        args, model, devloader, evaluation, e, best_mse, best_f1, eval_type="dev"
+    )
+    return loss_avg.item()
+
+
+def objective(trial, args, train_dataset, dev_dataset):
+    # Suggest a learning rate between 1e-5 and 1e-1, for example
+    lr = trial.suggest_loguniform("lr", 1e-5, 1e-1)
+    args.lr = lr  # Update the args with the suggested learning rate
+
+    # You might need to adjust the runner function to return validation loss
+    val_loss = runner_hyper_tuning(
+        args,
+        train_dataset,
+        dev_dataset,
+    )
+
+    return val_loss  # Optuna tries to minimize this value
+
+
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
@@ -664,7 +762,18 @@ if __name__ == "__main__":
     parser.add_argument("--text_indim", default=768, type=int)  # 768 for ec
     # 修正
     parser.add_argument(
-        "--text_embedding", type=str, default="kept"
+        "--text_embedding",
+        type=str,
+        choices=[
+            "TextSequence",
+            "ECT",
+            "gpt_summary",
+            "gpt_summary_overweight",
+            "gpt_summary_underweight",
+            "gpt_analysis_overweight",
+            "gpt_analysis_underweight",
+        ],
+        default="TextSequence",
     )  # bert-base : raw_bert_base_uncased; prosuai finbert: raw_prosusai_finbert; knowledge MLM : bert_base_uncased_pretrain_descrip_ep60; raw MLM: bert_base_uncased_pretrain_raw_ep60
     # flang-bert: ec_embed_flang_bert_raw
     parser.add_argument("--pkl_save_path", default="save_pkls", type=str)
@@ -767,11 +876,9 @@ if __name__ == "__main__":
         price_df_val,
         graph_embd_dict,
     ) = select_dataset(args, base_dir)
-    # ipdb.set_trace()
     train_dataset = ModifyData(
         args, traindf, single_traindf, price_df_train, args.raw_data_path
     )
-    ipdb.set_trace()
     test_dataset = ModifyData(
         args, testdf, single_testdf, price_df_test, args.raw_data_path
     )
@@ -782,8 +889,17 @@ if __name__ == "__main__":
 
     avg_day_mse_list, single_day_mse_list = [], []
 
+    # Hyperparameter tuning
+    study = optuna.create_study(direction="minimize")
+    study.optimize(
+        lambda trial: objective(trial, args, train_dataset, dev_dataset), n_trials=10
+    )
+    print(f"Best hyperparameters: {study.best_trial.params}")
+    optimal_learning_rate = study.best_trial.params["lr"]
+    args.lr = optimal_learning_rate
+
+    # Running with best parameters
     for i in range(10):
-        # ipdb.set_trace()
         args.logger.info("i=" + str(i))
         avg_day_mse_list, single_day_mse_list = runner(
             args,
@@ -812,13 +928,23 @@ if __name__ == "__main__":
     avg_day_mse_df = pd.DataFrame(avg_day_mse_list)
     # avg_day_mse_df.to_csv(out_path + '3GCN_LSTM_boxplot_cond_avg_day_mse_df.csv')
     # 修正
+    # Construct the directory path
+    dir_path = os.path.join(out_path, f"{args.dataset}_{args.text_embedding}")
+
+    # Check if the directory exists, and create it if it doesn't
+    if not os.path.exists(dir_path):
+        os.makedirs(dir_path)
     avg_day_mse_df.to_csv(
-        out_path + args.dataset + "/cond_avg_day_mse_df_{}.csv".format(args.duration)
+        out_path
+        + f"{args.dataset}_{args.text_embedding}"
+        + "/cond_avg_day_mse_df_{}.csv".format(args.duration)
     )
 
     single_day_mse_df = pd.DataFrame(single_day_mse_list)
     # single_day_mse_df.to_csv(out_path + '3GCN_LSTM_boxplot_cond_single_day_mse_df.csv')
     # 修正
     single_day_mse_df.to_csv(
-        out_path + args.dataset + "/cond_single_day_mse_df_{}.csv".format(args.duration)
+        out_path
+        + f"{args.dataset}_{args.text_embedding}"
+        + "/cond_single_day_mse_df_{}.csv".format(args.duration)
     )

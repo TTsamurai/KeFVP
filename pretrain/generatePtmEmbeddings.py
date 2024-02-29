@@ -17,10 +17,9 @@ def generate_embedding(args, tokenizer, model):
     output_dct = {}
     all_sent_num = []
     for data_dir in tqdm(data_list):
-        ipdb.set_trace()
         output_dct[data_dir] = {}
         # text_path = args.data_path + data_dir + '/TextSequence.txt'
-        text_path = args.data_path + data_dir + "/TextSequence.txt"  # For ec
+        text_path = args.data_path + data_dir + f"/{args.file_type}.txt"  # For ec
         text_file = open(text_path)
         all_sent_for_one_text = []
         for line in text_file.readlines():
@@ -54,8 +53,9 @@ def generate_embedding(args, tokenizer, model):
             else:
                 emb = emb[: args.max_sent, :]
             output_dct[data_dir][key] = emb.cpu().detach().numpy()
-
-    pickle.dump(output_dct, open(args.save_path, "wb"))
+    if not args.not_save:
+        save_path = args.save_path + args.file_type + ".pkl"
+        pickle.dump(output_dct, open(save_path, "wb"))
 
 
 def generate_embedding_large(args, tokenizer, model):
@@ -149,8 +149,8 @@ def generate_embedding_with_cuda(args, tokenizer, model):
             else:
                 emb = emb[: args.max_sent, :]
             output_dct[data_dir][key] = emb.detach().numpy()
-
-    pickle.dump(output_dct, open(args.save_path_with_cuda, "wb"))
+    if args.not_save == False:
+        pickle.dump(output_dct, open(args.save_path_with_cuda, "wb"))
 
 
 if __name__ == "__main__":
@@ -162,6 +162,10 @@ if __name__ == "__main__":
         type=str,
     )
     parser.add_argument(
+        "--not_save", action="store_true", help="If set, do not save the output."
+    )
+
+    parser.add_argument(
         "--data_path",
         # default="/your/project/path/raw_data/ReleasedDataset_mp3/",
         # ecかmaecのrawデータを指定するパス
@@ -172,13 +176,30 @@ if __name__ == "__main__":
     parser.add_argument("--max_sent", default=512, type=int)
     parser.add_argument("--local_rank", default=0, type=int)
     parser.add_argument(
-        "--save_path", default="/home/m2021ttakayanagi/Documents/KeFVP/text_embedding/kept.pkl", type=str
-    )
-    parser.add_argument(
-        "--save_path_with_cuda",
-        default="/home/m2021ttakayanagi/Documents/KeFVP/pklFiles/kept_cuda.pkl",
+        "--save_path",
+        default="/home/m2021ttakayanagi/Documents/KeFVP/text_embedding/",
         type=str,
     )
+    parser.add_argument(
+        "file_type",
+        choices=[
+            "TextSequence",
+            "ECT",
+            "gpt_summary",
+            "gpt_summary_overweight",
+            "gpt_summary_underweight",
+            "gpt_analysis_overweight",
+            "gpt_analysis_underweight",
+        ],
+        default="TextSequence",
+        help="Type of the file to process (default: %(default)s)",
+    )
+
+    # parser.add_argument(
+    #     "--save_path_with_cuda",
+    #     default="/home/m2021ttakayanagi/Documents/KeFVP/pklFiles/kept_cuda.pkl",
+    #     type=str,
+    # )
     args = parser.parse_args()
 
     print(args)

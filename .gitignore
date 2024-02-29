@@ -5,3 +5,5 @@ raw_data
 text_embedding
 preds_dir
 save_pkls
+output
+output_old
