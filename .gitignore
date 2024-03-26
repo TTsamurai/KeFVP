@@ -7,3 +7,6 @@ preds_dir
 save_pkls
 output
 output_old
+output_pre
+output_trial_10
+pred_output

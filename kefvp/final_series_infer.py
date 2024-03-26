@@ -317,10 +317,9 @@ def eval(args, model, dataloader, evaluation, e, best_mse, best_f1, eval_type="d
 
         loss_avg = 0.0
         loss_single = 0.0
-        pred = []
-        all_out, all_labels, pred = [], [], []
-        for i, batch in enumerate(dataloader):
+        all_out, all_labels, pred, y_list = [], [], [], []
 
+        for i, batch in enumerate(dataloader):
             X_past, X_graph, y_avg, y_single, y_price, X_audio = select_inputs(
                 args, batch
             )
@@ -333,6 +332,7 @@ def eval(args, model, dataloader, evaluation, e, best_mse, best_f1, eval_type="d
                 loss_avg += F.mse_loss(avg_pred, y_avg)
                 loss_single += F.mse_loss(single_pred, y_single)
                 pred += avg_pred.cpu().tolist()
+                y_list += y_avg.cpu().tolist()
             elif args.run_mode == "cls":
                 all_out += [np.argmax(avg_cls.float().cpu().numpy(), axis=1)]
                 all_labels += [y_price.long().cpu().numpy()]
@@ -442,7 +442,7 @@ def eval(args, model, dataloader, evaluation, e, best_mse, best_f1, eval_type="d
                     torch.save(model.state_dict(), save_path)
                     best_f1 = f1.item()
 
-    return evaluation, best_mse, loss_avg, loss_single, best_f1
+    return evaluation, best_mse, loss_avg, loss_single, best_f1, pred, y_list
 
 
 def save_embedding(args, model, train_dataloader, test_dataloader, dev_dataloader):
@@ -585,10 +585,10 @@ def runner(
         args.logger.info("Epoch: {}, Train loss: {}".format(e, train_loss_tol))
         evaluation["Train MSE"].append(train_loss_tol.item())
 
-        evaluation, best_mse, _, _, best_f1 = eval(
+        evaluation, best_mse, _, _, best_f1, _, _ = eval(
             args, model, devloader, evaluation, e, best_mse, best_f1, eval_type="dev"
         )
-        evaluation, _, _, _, _ = eval(
+        evaluation, _, _, _, _, _, _ = eval(
             args,
             model,
             testloader,
@@ -612,7 +612,7 @@ def runner(
             )
         )
     )
-    evaluation, best_mse, loss_avg, loss_single, _ = eval(
+    evaluation, best_mse, loss_avg, loss_single, _, pred, y_avg_all = eval(
         args, model, testloader, evaluation, "test", best_mse, best_f1, eval_type="test"
     )
     avg_day_mse_list.append(loss_avg.item())
@@ -630,11 +630,11 @@ def runner(
             dev_dataloader_forsave,
         )
 
-    evaluation, best_mse, _, _, best_f1 = eval(
+    evaluation, best_mse, _, _, best_f1, _, _ = eval(
         args, model, devloader, evaluation, "final", best_mse, best_f1, eval_type="dev"
     )
 
-    return avg_day_mse_list, single_day_mse_list
+    return avg_day_mse_list, single_day_mse_list, pred, y_avg_all
 
 
 def runner_hyper_tuning(
@@ -715,15 +715,15 @@ def runner_hyper_tuning(
             if args.gradient_clipping > 0.0:
                 nn.utils.clip_grad_norm_(model.parameters(), args.gradient_clipping)
             opt.step()
-    evaluation, best_mse, loss_avg, loss_single, best_f1 = eval(
+    evaluation, best_mse, loss_avg, loss_single, best_f1, _, _ = eval(
         args, model, devloader, evaluation, e, best_mse, best_f1, eval_type="dev"
     )
     return loss_avg.item()
 
 
 def objective(trial, args, train_dataset, dev_dataset):
-    # Suggest a learning rate between 1e-5 and 1e-1, for example
-    lr = trial.suggest_loguniform("lr", 1e-5, 1e-1)
+    # Suggest a learning rate between 1e-5 and 1e-1<- 2, for example
+    lr = trial.suggest_loguniform("lr", 1e-5, 1e-2)
     args.lr = lr  # Update the args with the suggested learning rate
 
     # You might need to adjust the runner function to return validation loss
@@ -740,7 +740,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--lr", default=0.0002, type=float)  # 0.0005
-    parser.add_argument("--epochs", default=200, type=int)  # 100
+    parser.add_argument("--epochs", default=100, type=int)  # 100
     parser.add_argument("--weight_decay", default=1e-2, type=float)
     parser.add_argument("--kernel_size", default=5, type=int)
     parser.add_argument("--batch_size", default=32, type=int)
@@ -857,6 +857,7 @@ if __name__ == "__main__":
     args.logger.info(args)
 
     out_path = "/home/m2021ttakayanagi/Documents/KeFVP/kefvp/output/"
+    pred_out_path = "/home/m2021ttakayanagi/Documents/KeFVP/kefvp/pred_output/"
     base_dir = "/home/m2021ttakayanagi/Documents/KeFVP/"
     feature_dir = "/home/m2021ttakayanagi/Documents/KeFVP/save_features"
 
@@ -892,7 +893,7 @@ if __name__ == "__main__":
     # Hyperparameter tuning
     study = optuna.create_study(direction="minimize")
     study.optimize(
-        lambda trial: objective(trial, args, train_dataset, dev_dataset), n_trials=10
+        lambda trial: objective(trial, args, train_dataset, dev_dataset), n_trials=5
     )
     print(f"Best hyperparameters: {study.best_trial.params}")
     optimal_learning_rate = study.best_trial.params["lr"]
@@ -901,7 +902,7 @@ if __name__ == "__main__":
     # Running with best parameters
     for i in range(10):
         args.logger.info("i=" + str(i))
-        avg_day_mse_list, single_day_mse_list = runner(
+        avg_day_mse_list, single_day_mse_list, pred_list, y_list = runner(
             args,
             train_dataset,
             test_dataset,
@@ -925,15 +926,23 @@ if __name__ == "__main__":
         args.logger.info("Avg MSE: {}".format(avg_day_mse_list))
         args.logger.info("SINGLE MSE: {}".format(single_day_mse_list))
 
+    pred_y_df = pd.DataFrame({"pred": pred_list, "y": y_list})
     avg_day_mse_df = pd.DataFrame(avg_day_mse_list)
     # avg_day_mse_df.to_csv(out_path + '3GCN_LSTM_boxplot_cond_avg_day_mse_df.csv')
     # 修正
     # Construct the directory path
     dir_path = os.path.join(out_path, f"{args.dataset}_{args.text_embedding}")
+    dir_pred_path = os.path.join(pred_out_path, f"{args.dataset}_{args.text_embedding}")
 
     # Check if the directory exists, and create it if it doesn't
     if not os.path.exists(dir_path):
         os.makedirs(dir_path)
+        os.makedirs(dir_pred_path)
+    pred_y_df.to_csv(
+        pred_out_path
+        + f"{args.dataset}_{args.text_embedding}"
+        + "/cond_pred_y_df_{}.csv".format(args.duration)
+    )
     avg_day_mse_df.to_csv(
         out_path
         + f"{args.dataset}_{args.text_embedding}"
